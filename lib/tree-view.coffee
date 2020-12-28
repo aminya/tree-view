@@ -6,6 +6,7 @@ _ = require 'underscore-plus'
 {repoForPath, getStyleObject, getFullExtension} = require "./helpers"
 fs = require 'fs-plus'
 del = require 'del'
+trash = require 'trash'
 
 AddDialog = require './add-dialog'
 MoveDialog = require './move-dialog'
@@ -683,6 +684,22 @@ class TreeView
     if firstSelectedEntry
       @selectEntry(firstSelectedEntry.closest('.directory:not(.selected)'))
     @updateRoots() if atom.config.get('tree-view.squashDirectoryNames')
+
+  trashSelectedPaths: (selectedPaths, selectedEntries, failedDeletions) ->
+    trash(selectedPaths, {glob: false})
+    .then( ->
+      for deletedPath in selectedPaths
+        @emitter.emit 'entry-deleted', {pathToDelete: deletedPath}
+      )
+    .catch((err) ->
+      atom.notifications.addError @formatTrashFailureMessage(failedDeletions, false),
+        description: @formatTrashEnabledMessage()
+        detail: "#{selectedPaths.join('\n')}"
+        dismissable: true
+      for selectedPath in selectedPaths
+        @emitter.emit 'delete-entry-failed', {pathToDelete: selectedPath}
+      )
+    .finally( -> @finishRemoval(selectedEntries[0]))
 
   removeSelectedPathsPermanently: (selectedPaths, selectedEntries) ->
     del(selectedPaths, {force: true})
